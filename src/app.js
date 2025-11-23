@@ -28,10 +28,32 @@ app.use(helmet({
 app.use(generalLimiter);
 
 app.use(cors({
-    origin: process.env.CORS_ORIGIN,
-    credentials: true
+    origin: [
+        'http://localhost:3000',
+        'http://localhost:3001', 
+        process.env.CORS_ORIGIN
+    ].filter(Boolean), // Remove any undefined values
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+        'Content-Type', 
+        'Authorization', 
+        'X-Requested-With', 
+        'Accept', 
+        'Origin',
+        'Access-Control-Allow-Origin',
+        'Access-Control-Allow-Headers',
+        'Access-Control-Allow-Methods'
+    ],
+    exposedHeaders: ['Set-Cookie'],
+    optionsSuccessStatus: 200,
+    preflightContinue: false
 }))
-console.log("CORS enabled for origin:", process.env.CORS_ORIGIN);
+console.log("CORS enabled for origins:", [
+    'http://localhost:3000',
+    'http://localhost:3001', 
+    process.env.CORS_ORIGIN
+].filter(Boolean));
 app.use(express.json({ limit: "20kb" }));
 app.use(express.urlencoded({ extended: true, limit: "20kb" }));
 app.use(express.static("public"));
@@ -45,10 +67,7 @@ import messageRouter from './router/message.routers.js';
 app.use("/api/messages", messageRouter);
 
 import chatRoomRouter from './router/chatRoom.routes.js';
-app.use("/api/chat-rooms", chatRoomRouter);
-
-import notificationRouter from './router/notification.routes.js';
-app.use("/api/notifications", notificationRouter);
+app.use("/api/chat-rooms",chatRoomRouter);
 
 // 404 handler for unknown routes
 app.use(notFoundHandler);

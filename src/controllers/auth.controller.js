@@ -50,7 +50,7 @@ const registerUser = asyncHandler(async (req, res) => {
   
 
   const profilePicLocalPath = req.files?.profilePic?.[0]?.path;
-  console.log("Profile picture path:", profilePicLocalPath);
+  // Profile picture path logged
 
   if (profilePicLocalPath) {
     const uploadedImage = await uploadOnCloudinary(profilePicLocalPath);
@@ -117,13 +117,13 @@ const loginUser = asyncHandler(async (req, res) => {
   }
 
   const user = username
-    ? await User.findOne({ username }).select("+password")
+    ? await User.findOne({ username }).select("+password") 
     : await User.findOne({ email }).select("+password");
 
   if (!user) {
     throw new apiError(404, "User not found with the provided email or username.")
   }
-  const isPasswordValid = await user.comparePassword(password);
+  const isPasswordValid = await user.comparePassword(password); 
 
   if (!isPasswordValid) {
     throw new apiError(401, "Invalid user credentials");
@@ -169,7 +169,7 @@ const loginUser = asyncHandler(async (req, res) => {
       await RefreshToken.findByIdAndDelete(oldestToken._id);
     }
   } catch (err) {
-    console.error("Failed to delete oldest token", err);
+    // Failed to delete oldest token
   }
 
   await RefreshToken.create({
@@ -379,7 +379,7 @@ const requestPasswordReset = asyncHandler(async (req, res) => {
     user.resetPasswordOTPAttemptCount = 0;
     await user.save({ validateBeforeSave: false });
 
-    console.error("Failed to send password reset email", error);
+    // Failed to send password reset email
     throw new apiError(HTTP_STATUS.INTERNAL_SERVER_ERROR, "Failed to send OTP. Please try again.");
   }
 

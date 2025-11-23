@@ -82,10 +82,10 @@ export const globalErrorHandler = (err, req, res, next) => {
     success: false,
     statusCode: error.statusCode,
     message: error.message,
-    ...(process.env.NODE_ENV === "development" && { 
-      stack: error.stack,
-      errors: error.errors 
-    })
+    // Always show validation errors for better debugging
+    ...(error.errors && error.errors.length > 0 && { errors: error.errors }),
+    // Only show stack trace in development
+    ...(process.env.NODE_ENV === "development" && { stack: error.stack })
   };
 
   res.status(error.statusCode).json(response);

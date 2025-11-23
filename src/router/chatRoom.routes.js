@@ -5,12 +5,14 @@ import {
   addParticipant,
   removeParticipant,
   updateGroupChat,
+  updateGroupImage,
   leaveGroupChat,
   getChatRoomDetails
 } from "../controllers/chatRoom.controller.js";
 import { verifyJWT } from "../middlewares/auth.middleware.js";
 import { validateObjectId } from "../middlewares/validation.middleware.js";
 import { generalLimiter } from "../middlewares/rateLimiter.middleware.js";
+import { upload } from "../middlewares/multer.middleware.js";
 
 const router = new Router();
 
@@ -18,6 +20,7 @@ const router = new Router();
 router.route("/create-group").post(
   verifyJWT,
   generalLimiter,
+  upload.fields([{ name: "groupImage", maxCount: 1 }]),
   createGroupChat
 );
 
@@ -38,7 +41,16 @@ router.route("/:roomId").get(
 router.route("/:roomId").put(
   verifyJWT,
   validateObjectId("roomId"),
+  upload.fields([{ name: "groupImage", maxCount: 1 }]),
   updateGroupChat
+);
+
+// Update group image specifically
+router.route("/:roomId/update-image").put(
+  verifyJWT,
+  validateObjectId("roomId"),
+  upload.fields([{ name: "groupImage", maxCount: 1 }]),
+  updateGroupImage
 );
 
 // Add participant to group chat

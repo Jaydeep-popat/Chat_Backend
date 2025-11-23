@@ -13,35 +13,50 @@ const chatRoomSchema = new mongoose.Schema(
         message: "Group chats must have a name.",
       },
     },
-    participants: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        required: true,
-        validate: {
-          validator: function (v) {
-            return v.length >= 2;
-          },
-          message: "A chat room must have at least two participants.",
+    description: {
+      type: String,
+      default: null,
+      trim: true,
+      maxlength: [500, "Description cannot exceed 500 characters"]
+    },
+    groupImage: {
+      type: String,
+      default: null,
+      trim: true
+    },
+    participants: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
+          required: true,
         },
+      ],
+      validate: {
+        validator: function (v) {
+          return Array.isArray(v) && v.length >= 2;
+        },
+        message: "A chat room must have at least two participants.",
       },
-    ],
+    },
     isGroupChat: {
       type: Boolean,
       default: false,
     },
-    admins: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        validate: {
-          validator: function (v) {
-            return this.isGroupChat ? v && v.length > 0 : true;
-          },
-          message: "Group chats must have at least one admin.",
+    admins: {
+      type: [
+        {
+          type: mongoose.Schema.Types.ObjectId,
+          ref: "User",
         },
+      ],
+      validate: {
+        validator: function (v) {
+          return this.isGroupChat ? Array.isArray(v) && v.length > 0 : true;
+        },
+        message: "Group chats must have at least one admin.",
       },
-    ],
+    },
     lastMessage: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Message",

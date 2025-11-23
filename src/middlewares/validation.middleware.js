@@ -10,7 +10,12 @@ export const handleValidationErrors = (req, res, next) => {
       message: error.msg,
       value: error.value
     }));
-    throw new apiError(400, "Validation failed", formattedErrors);
+    
+    // Create a more detailed error message
+    const errorMessages = formattedErrors.map(err => `${err.field}: ${err.message}`).join(', ');
+    const detailedMessage = `Validation failed - ${errorMessages}`;
+    
+    throw new apiError(400, detailedMessage, formattedErrors);
   }
   next();
 };

@@ -1,24 +1,24 @@
 import { apiError } from "../utils/apiError.js";
 import { User } from "../models/user.model.js";
 import { Message } from "../models/Message.model.js";
+import { ChatRoom } from "../models/chatRoom.model.js";
 import jwt from "jsonwebtoken";
 import cookie from "cookie";
 
 const userSocketMap = new Map();
 
-// Function to auto-join user to existing conversations
+// Function to auto-join user to existing conversations and group chats
 const autoJoinExistingConversations = async (userId, socket, io) => {
   try {
-    console.log(`🔍 Auto-joining user ${userId} to existing conversations...`);
-    
-    // Find all conversations where this user is a participant
+    // Find all DM conversations where this user is a participant
     const conversations = await Message.aggregate([
       {
         $match: {
           $or: [
             { sender: userId },
             { receiver: userId }
-          ]
+          ],
+          room: null // Only DM messages
         }
       },
       {
@@ -35,9 +35,7 @@ const autoJoinExistingConversations = async (userId, socket, io) => {
       }
     ]);
 
-    console.log(`📋 Found ${conversations.length} existing conversations for user ${userId}`);
-
-    // Join each conversation room
+    // Join each DM conversation room
     conversations.forEach((conv) => {
       const otherUserId = conv._id;
       const roomId = [userId, otherUserId].sort().join("-");
@@ -45,15 +43,28 @@ const autoJoinExistingConversations = async (userId, socket, io) => {
       if (!socket.joinedRooms.has(roomId)) {
         socket.join(roomId);
         socket.joinedRooms.add(roomId);
-        console.log(`✅ Auto-joined user ${userId} to conversation room ${roomId} with user ${otherUserId}`);
-      } else {
-        console.log(`ℹ️ User ${userId} already in room ${roomId}`);
+        // Auto-joined user to conversation room
       }
     });
 
-    console.log(`✅ Auto-join complete for user ${userId}`);
+    // Find and join all group chats where user is a participant
+    const groupChats = await ChatRoom.find({
+      participants: userId,
+      isGroupChat: true,
+      deleted: false
+    });
+
+    groupChats.forEach((room) => {
+      const roomId = room._id.toString();
+      if (!socket.joinedRooms.has(roomId)) {
+        socket.join(roomId);
+        socket.joinedRooms.add(roomId);
+        console.log(`🏠 Auto-joined user ${userId} to group chat ${room.name} (${roomId})`);
+      }
+    });
+
   } catch (error) {
-    console.error(`❌ Error auto-joining user ${userId} to conversations:`, error);
+    console.error('Error auto-joining user to conversations:', error);
   }
 };
 
@@ -61,53 +72,33 @@ export const initSocket = (io) => {
   // Middleware for authentication
   io.use(async (socket, next) => {
     try {
-      console.log('🔐 Socket authentication attempt:', {
-        socketId: socket.id,
-        hasHeaders: !!socket.handshake.headers,
-        hasCookies: !!socket.handshake.headers.cookie,
-        userAgent: socket.handshake.headers['user-agent']?.substring(0, 50)
-      });
       
       const cookies = socket.handshake.headers.cookie
         ? cookie.parse(socket.handshake.headers.cookie)
         : {};
-
-      console.log('🍪 Parsed cookies:', Object.keys(cookies));
       
       // Only accept tokens from cookies (more secure than query params)
       const token = cookies.accessToken;
       if (!token) {
-        console.error('❌ No access token found in cookies');
         throw new apiError(401, "Unauthorized", "No access token provided in cookies.");
       }
-      
-      console.log('✅ Token found, length:', token.length);
 
       const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
       socket.userId = decoded._id;
-      console.log('✅ Token decoded, userId:', decoded._id);
 
       const user = await User.findById(socket.userId).select("_id");
       if (!user) {
-        console.error('❌ User not found in database:', socket.userId);
-        throw new apiError(404, "User not found.");
+        throw new apiError(401, "User not found");
       }
       
-      console.log('✅ User authenticated successfully:', socket.userId);
       next();
     } catch (err) {
-      console.error("Socket authentication error:", err.message);
       next({ status: err.status || 401, message: err.message || "Auth error" });
     }
   });
 
   io.on("connection", (socket) => {
     const userId = socket.userId;
-    console.log('🎉 Socket connection established:', {
-      userId,
-      socketId: socket.id,
-      totalConnections: io.engine.clientsCount
-    });
 
     // Track multiple sockets per user
     if (!userSocketMap.has(userId)) {
@@ -115,18 +106,11 @@ export const initSocket = (io) => {
     }
     userSocketMap.get(userId).add(socket.id);
     
-    console.log('👥 User socket mapping updated:', {
-      userId,
-      socketCount: userSocketMap.get(userId).size,
-      totalUsers: userSocketMap.size
-    });
+    // User socket mapping updated
 
     // Update user's online status when they connect
     User.findByIdAndUpdate(userId, { isOnline: true }, { new: true })
       .then(async (updatedUser) => {
-        console.log(`🟢 User ${userId} is now online`);
-        console.log(`📡 Broadcasting user-online event for user ${userId}`);
-        
         // Auto-join user to existing conversations where they're a participant
         await autoJoinExistingConversations(userId, socket, io);
         
@@ -141,10 +125,10 @@ export const initSocket = (io) => {
         });
       })
       .catch((err) => {
-        console.error("Error updating online status:", err);
+        // Error updating online status
       });
 
-    console.log(`🔌 Socket connected for user ${userId}. Total sockets for this user:`, userSocketMap.get(userId)?.size || 0);
+    // Socket connected for user
 
     // Track rooms user has joined (optional but safe)
     socket.joinedRooms = new Set();
@@ -163,12 +147,12 @@ export const initSocket = (io) => {
         if (!socket.joinedRooms.has(roomId)) {
           socket.join(roomId);
           socket.joinedRooms.add(roomId);
-          console.log(`User ${userId} joined room ${roomId}`);
+          // User joined room
         }
 
         socket.emit("chat-joined", { roomId });
       } catch (err) {
-        console.error("Join room error:", err.message);
+        // Join room error
         socket.emit("error", { status: err.status || 400, message: err.message });
       }
     });
@@ -181,19 +165,19 @@ export const initSocket = (io) => {
      */
     socket.on("join-conversation", ({ targetUserId }) => {
       try {
-        console.log(`📨 User ${userId} requesting to join conversation with ${targetUserId}`);
+        // User requesting to join conversation
         
         if (!targetUserId) {
           throw new apiError(400, "Target user ID required.");
         }
 
         const roomId = [userId.toString(), targetUserId.toString()].sort().join("-");
-        console.log(`🏠 Room ID for conversation: ${roomId}`);
+        // Room ID for conversation
 
         if (!socket.joinedRooms.has(roomId)) {
           socket.join(roomId);
           socket.joinedRooms.add(roomId);
-          console.log(`✅ User ${userId} joined conversation room ${roomId}`);
+          // User joined conversation room
         }
 
         // Also ensure the target user joins the room if they're online
@@ -207,16 +191,16 @@ export const initSocket = (io) => {
               if (!targetSocket.joinedRooms.has(roomId)) {
                 targetSocket.join(roomId);
                 targetSocket.joinedRooms.add(roomId); 
-                console.log(`✅ Target user ${targetUserId} auto-joined room ${roomId}`);
+                // Target user auto-joined room
               }
             }
           });
         }
 
         socket.emit("conversation-joined", { roomId, targetUserId });
-        console.log(`📤 Emitted conversation-joined event to user ${userId}`);
+        // Emitted conversation-joined event
       } catch (err) {
-        console.error("❌ Join conversation error:", err.message);
+        // Join conversation error
         socket.emit("error", { status: err.status || 400, message: err.message });
       }
     });
@@ -226,7 +210,7 @@ export const initSocket = (io) => {
      */
     socket.on("join-group", ({ roomId }) => {
       try {
-        console.log(`👥 User ${userId} joining group room ${roomId}`);
+        // User joining group room
         
         if (!roomId) {
           throw new apiError(400, "Room ID required.");
@@ -239,9 +223,9 @@ export const initSocket = (io) => {
         socket.joinedRooms.add(roomId);
         
         socket.emit("group-joined", { roomId });
-        console.log(`✅ User ${userId} joined group room ${roomId}`);
+        // User joined group room
       } catch (err) {
-        console.error("❌ Join group error:", err.message);
+        // Join group error
         socket.emit("error", { status: err.status || 400, message: err.message });
       }
     });
@@ -251,7 +235,7 @@ export const initSocket = (io) => {
      */
     socket.on("send-private-message", async ({ targetUserId, content, messageType = "text" }) => {
       try {
-        console.log(`📨 User ${userId} sending message to ${targetUserId}`);
+        // User sending message
         
         if (!targetUserId || !content) {
           throw new apiError(400, "Target user ID and content required.");
@@ -303,9 +287,9 @@ export const initSocket = (io) => {
           timestamp: newMessage.createdAt,
         });
 
-        console.log(`✅ Message sent from ${userId} to ${targetUserId}`);
+        // Message sent
       } catch (err) {
-        console.error("❌ Send private message error:", err.message);
+        // Send private message error
         socket.emit("error", { status: err.status || 400, message: err.message });
       }
     });
@@ -318,12 +302,41 @@ export const initSocket = (io) => {
         if (targetUserId) {
           // Direct message typing
           const roomIdGenerated = [userId.toString(), targetUserId.toString()].sort().join("-");
+          
+          // Ensure both users are in the room
+          if (!socket.joinedRooms) socket.joinedRooms = new Set();
+          if (!socket.joinedRooms.has(roomIdGenerated)) {
+            socket.join(roomIdGenerated);
+            socket.joinedRooms.add(roomIdGenerated);
+          }
+          
+          // Ensure target user is also in room if online
+          const targetUserSockets = userSocketMap.get(targetUserId.toString());
+          if (targetUserSockets) {
+            targetUserSockets.forEach((targetSocketId) => {
+              const targetSocket = io.sockets.sockets.get(targetSocketId);
+              if (targetSocket) {
+                if (!targetSocket.joinedRooms) targetSocket.joinedRooms = new Set();
+                if (!targetSocket.joinedRooms.has(roomIdGenerated)) {
+                  targetSocket.join(roomIdGenerated);
+                  targetSocket.joinedRooms.add(roomIdGenerated);
+                }
+              }
+            });
+          }
+          
           socket.to(roomIdGenerated).emit("user-typing", { 
             userId: userId.toString(), 
             isTyping: true 
           });
         } else if (roomId) {
-          // Group chat typing
+          // Group chat typing - ensure user is in the room
+          if (!socket.joinedRooms) socket.joinedRooms = new Set();
+          if (!socket.joinedRooms.has(roomId)) {
+            socket.join(roomId);
+            socket.joinedRooms.add(roomId);
+          }
+          
           socket.to(roomId).emit("user-typing", { 
             userId: userId.toString(), 
             isTyping: true,
@@ -331,7 +344,7 @@ export const initSocket = (io) => {
           });
         }
       } catch (err) {
-        console.error("❌ Typing start error:", err.message);
+        socket.emit("error", { status: err.status || 400, message: err.message });
       }
     });
 
@@ -340,6 +353,7 @@ export const initSocket = (io) => {
         if (targetUserId) {
           // Direct message typing
           const roomIdGenerated = [userId.toString(), targetUserId.toString()].sort().join("-");
+          
           socket.to(roomIdGenerated).emit("user-typing", { 
             userId: userId.toString(), 
             isTyping: false 
@@ -353,7 +367,7 @@ export const initSocket = (io) => {
           });
         }
       } catch (err) {
-        console.error("❌ Typing stop error:", err.message);
+        socket.emit("error", { status: err.status || 400, message: err.message });
       }
     });
 
@@ -369,17 +383,17 @@ export const initSocket = (io) => {
           // Update user's offline status when all their sockets disconnect
           User.findByIdAndUpdate(userId, { isOnline: false }, { new: true })
             .then((updatedUser) => {
-              console.log(`🔴 User ${userId} is now offline`);
+              // User is now offline
               
               // Broadcast to all connected users that this user is offline
               io.emit("user-offline", { userId: userId.toString() });
             })
             .catch((err) => {
-              console.error("Error updating offline status:", err);
+              // Error updating offline status
             });
         }
       }
-      console.log(`🔌 User ${userId} disconnected. Active sockets:`, userSocketMap.get(userId)?.size || 0);
+      // User disconnected
     });
   });
 

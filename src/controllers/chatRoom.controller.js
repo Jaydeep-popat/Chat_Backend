@@ -4,19 +4,40 @@ import { apiResponse } from "../utils/apiResponce.js";
 import { ChatRoom } from "../models/chatRoom.model.js";
 import { User } from "../models/user.model.js";
 import { Message } from "../models/Message.model.js";
+import { uploadOnCloudinary } from "../utils/clodinary.js";
 import { HTTP_STATUS, PAGINATION } from "../constants/index.js";
 
 // Create a new group chat room
 const createGroupChat = asyncHandler(async (req, res) => {
-  const { name, participants } = req.body;
+  const { name, description } = req.body;
+  let { participants } = req.body;
   const createdBy = req.user._id;
 
   if (!name || !name.trim()) {
     throw new apiError(HTTP_STATUS.BAD_REQUEST, "Group chat name is required.");
   }
 
+  // Parse participants if it's a string (from FormData)
+  if (typeof participants === 'string') {
+    try {
+      participants = JSON.parse(participants);
+    } catch (error) {
+      throw new apiError(HTTP_STATUS.BAD_REQUEST, "Invalid participants format.");
+    }
+  }
+
   if (!participants || !Array.isArray(participants) || participants.length < 1) {
     throw new apiError(HTTP_STATUS.BAD_REQUEST, "At least one other participant is required.");
+  }
+
+  // Handle group image upload if provided
+  let groupImageUrl = null;
+  if (req.files?.groupImage?.[0]?.path) {
+    const groupImagePath = req.files.groupImage[0].path;
+    const uploadedImage = await uploadOnCloudinary(groupImagePath);
+    if (uploadedImage) {
+      groupImageUrl = uploadedImage.url;
+    }
   }
 
   // Add creator to participants if not already included
@@ -30,6 +51,8 @@ const createGroupChat = asyncHandler(async (req, res) => {
 
   const chatRoom = await ChatRoom.create({
     name: name.trim(),
+    description: description?.trim() || null,
+    groupImage: groupImageUrl,
     participants: allParticipants,
     isGroupChat: true,
     admins: [createdBy],
@@ -246,12 +269,8 @@ const removeParticipant = asyncHandler(async (req, res) => {
 // Update group chat details
 const updateGroupChat = asyncHandler(async (req, res) => {
   const { roomId } = req.params;
-  const { name } = req.body;
+  const { name, description } = req.body;
   const currentUserId = req.user._id;
-
-  if (!name || !name.trim()) {
-    throw new apiError(HTTP_STATUS.BAD_REQUEST, "Group chat name is required.");
-  }
 
   const chatRoom = await ChatRoom.findById(roomId);
   if (!chatRoom) {
@@ -267,7 +286,25 @@ const updateGroupChat = asyncHandler(async (req, res) => {
     throw new apiError(HTTP_STATUS.FORBIDDEN, "Only admins can update group details.");
   }
 
-  chatRoom.name = name.trim();
+  // Handle group image upload if provided
+  let groupImageUrl = chatRoom.groupImage; // Keep existing image if no new one
+  if (req.files?.groupImage?.[0]?.path) {
+    const groupImagePath = req.files.groupImage[0].path;
+    const uploadedImage = await uploadOnCloudinary(groupImagePath);
+    if (uploadedImage) {
+      groupImageUrl = uploadedImage.url;
+    }
+  }
+
+  // Update fields
+  if (name && name.trim()) {
+    chatRoom.name = name.trim();
+  }
+  if (description !== undefined) {
+    chatRoom.description = description?.trim() || null;
+  }
+  chatRoom.groupImage = groupImageUrl;
+  
   await chatRoom.save();
 
   const updatedRoom = await ChatRoom.findById(roomId)
@@ -370,13 +407,82 @@ const getChatRoomDetails = asyncHandler(async (req, res) => {
     throw new apiError(HTTP_STATUS.NOT_FOUND, "Chat room not found.");
   }
 
-  // Check if user is a participant
-  if (!chatRoom.participants.some(p => p._id.toString() === currentUserId.toString())) {
+  // Check if user is the creator (always allow creator access)
+  const isCreator = (chatRoom.createdBy._id ? chatRoom.createdBy._id.toString() : chatRoom.createdBy.toString()) === currentUserId.toString();
+
+  // Check if user is a participant (handle both populated and unpopulated participants)
+  const isParticipant = chatRoom.participants.some(participant => {
+    // Handle populated participants (objects with _id)
+    if (participant && typeof participant === 'object' && participant._id) {
+      return participant._id.toString() === currentUserId.toString();
+    }
+    // Handle unpopulated participants (ObjectIds)
+    return participant.toString() === currentUserId.toString();
+  });
+  
+  // Allow access if user is creator OR participant
+  if (!isCreator && !isParticipant) {
     throw new apiError(HTTP_STATUS.FORBIDDEN, "You are not a participant in this chat.");
   }
 
   return res.status(HTTP_STATUS.OK).json(
     new apiResponse(HTTP_STATUS.OK, chatRoom, "Chat room details fetched successfully")
+  );
+});
+
+// Update group image specifically
+const updateGroupImage = asyncHandler(async (req, res) => {
+  const { roomId } = req.params;
+  const currentUserId = req.user._id;
+
+  const chatRoom = await ChatRoom.findById(roomId);
+  if (!chatRoom) {
+    throw new apiError(HTTP_STATUS.NOT_FOUND, "Chat room not found.");
+  }
+
+  if (!chatRoom.isGroupChat) {
+    throw new apiError(HTTP_STATUS.BAD_REQUEST, "Can only update group chat images.");
+  }
+
+  // Check if current user is admin
+  if (!chatRoom.admins.includes(currentUserId)) {
+    throw new apiError(HTTP_STATUS.FORBIDDEN, "Only admins can update group image.");
+  }
+
+  // Handle group image upload
+  if (!req.files?.groupImage?.[0]?.path) {
+    throw new apiError(HTTP_STATUS.BAD_REQUEST, "Group image file is required.");
+  }
+
+  const groupImagePath = req.files.groupImage[0].path;
+  const uploadedImage = await uploadOnCloudinary(groupImagePath);
+  
+  if (!uploadedImage) {
+    throw new apiError(HTTP_STATUS.INTERNAL_SERVER_ERROR, "Failed to upload group image.");
+  }
+
+  chatRoom.groupImage = uploadedImage.url;
+  await chatRoom.save();
+
+  const updatedRoom = await ChatRoom.findById(roomId)
+    .populate("participants", "displayName profilePic username")
+    .populate("admins", "displayName profilePic username");
+
+  // Emit socket event
+  const io = req.app.get("io");
+  if (io && io.userSocketMap) {
+    chatRoom.participants.forEach(participantId => {
+      const userSockets = io.userSocketMap.get(participantId.toString());
+      if (userSockets) {
+        userSockets.forEach(socketId => {
+          io.to(socketId).emit("group-updated", updatedRoom);
+        });
+      }
+    });
+  }
+
+  return res.status(HTTP_STATUS.OK).json(
+    new apiResponse(HTTP_STATUS.OK, updatedRoom, "Group image updated successfully")
   );
 });
 
@@ -386,6 +492,7 @@ export {
   addParticipant,
   removeParticipant,
   updateGroupChat,
+  updateGroupImage,
   leaveGroupChat,
   getChatRoomDetails
 };

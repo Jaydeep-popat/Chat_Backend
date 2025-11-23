@@ -14,7 +14,7 @@ const uploadOnCloudinary = async (localFilePath) => {
 
   try {
     if (!localFilePath) {
-      console.error("❌ No local file path provided");
+      // No local file path provided
       return null;
     }
 
@@ -26,7 +26,7 @@ const uploadOnCloudinary = async (localFilePath) => {
     fs.unlinkSync(localFilePath); // Clean up temp file
     return response;
   } catch (error) {
-    console.error("❌ Cloudinary upload error:", error.message);
+    // Cloudinary upload error
     if (fs.existsSync(localFilePath)) {
       fs.unlinkSync(localFilePath); // Remove temp file on error
     }

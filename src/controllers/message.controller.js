@@ -136,8 +136,26 @@ const sendMessage = asyncHandler(async (req, res) => {
       console.log(`📭 No receiver sockets found for user ${receiver} - message will not be delivered in real-time`);
     }
   } else if (room) {
-    // If it's a room-based message, emit to the room
-    io.to(room.toString()).emit("receive-message", populatedMessage);
+    // For group messages, emit to all room participants
+    const chatRoom = await ChatRoom.findById(room).populate('participants', '_id');
+    
+    if (chatRoom) {
+      console.log(`📤 Emitting group message to room ${room} with ${chatRoom.participants.length} participants`);
+      
+      // Emit to each participant's sockets individually to avoid self-notification issues
+      chatRoom.participants.forEach(participant => {
+        const participantId = participant._id.toString();
+        const participantSockets = userSocketMap.get(participantId);
+        
+        if (participantSockets && participantId !== sender.toString()) {
+          // Don't send to sender
+          participantSockets.forEach(socketId => {
+            console.log(`📡 Emitting group message to participant ${participantId}, socket ${socketId}`);
+            io.to(socketId).emit("receive-message", populatedMessage);
+          });
+        }
+      });
+    }
   }
 
   return res
@@ -184,7 +202,7 @@ const getMessages = asyncHandler(async (req, res) => {
 
   try {
     const messages = await Message.find(query)
-      .sort({ createdAt: 1 })
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limitNumber)
       .populate("sender", "displayName profilePic username");
@@ -386,8 +404,8 @@ const markAsRead = asyncHandler(async (req, res) => {
 const getChatList = asyncHandler(async (req, res) => {
   const userId = req.user._id;
 
-  // Find all DMs and group messages involving the user
-  const messages = await Message.aggregate([
+  // Step 1: Get conversations from messages (existing logic for DMs and groups with messages)
+  const messagesWithConversations = await Message.aggregate([
     {
       $match: {
         $or: [
@@ -467,13 +485,53 @@ const getChatList = asyncHandler(async (req, res) => {
         room: { $arrayElemAt: ["$room", 0] },
         unreadCount: 1
       }
-    },
-    // Sort chat list by latest message
-    { $sort: { "lastMessage.createdAt": -1 } }
+    }
   ]);
 
+  // Step 2: Get all group chats where user is a participant (including those without messages)
+  const userGroups = await ChatRoom.find({
+    participants: userId,
+    isGroupChat: true,
+    deleted: false
+  })
+  .populate("participants", "displayName profilePic username")
+  .populate("admins", "displayName profilePic username")
+  .populate("createdBy", "displayName profilePic username")
+  .sort({ updatedAt: -1 });
+
+  // Step 3: Create a set of room IDs that already have messages
+  const roomsWithMessages = new Set();
+  messagesWithConversations.forEach(conv => {
+    if (conv.room && conv.room._id) {
+      roomsWithMessages.add(conv.room._id.toString());
+    }
+  });
+
+  // Step 4: Add groups without messages to the conversation list
+  const groupsWithoutMessages = userGroups
+    .filter(group => !roomsWithMessages.has(group._id.toString()))
+    .map(group => ({
+      _id: group._id,
+      lastMessage: null,
+      sender: null,
+      receiver: null,
+      room: group,
+      unreadCount: 0
+    }));
+
+  // Step 5: Combine and sort all conversations
+  const allConversations = [
+    ...messagesWithConversations,
+    ...groupsWithoutMessages
+  ].sort((a, b) => {
+    // Sort by last message time, with groups without messages at the end
+    const aTime = a.lastMessage ? new Date(a.lastMessage.createdAt) : new Date(0);
+    const bTime = b.lastMessage ? new Date(b.lastMessage.createdAt) : new Date(0);
+    return bTime - aTime;
+  });
+
   return res.status(200).json(
-    new apiResponse(200, messages, "Chat list fetched successfully")
+    new apiResponse(200, allConversations, "Chat list fetched successfully")
   );
 });
 
