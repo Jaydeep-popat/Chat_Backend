@@ -37,10 +37,10 @@ const buildTransporter = () => {
   // Test the connection
   cachedTransporter.verify()
     .then(() => {
-      // SMTP connection verified
+      console.log("✅ SMTP connection verified successfully");
     })
     .catch((error) => {
-      // SMTP connection failed
+      console.log("❌ SMTP connection failed:", error.message);
     });
 
   return cachedTransporter;
@@ -60,10 +60,13 @@ export const sendMail = async ({ to, subject, text, html, from }) => {
   }
 
   try {
+    console.log(`📧 Preparing to send email to: ${to}`);
+    console.log(`📬 Email subject: ${subject}`);
+    
     const transporter = buildTransporter();
     const sender = from || process.env.SMTP_FROM || process.env.SMTP_USER;
 
-    // Sending email
+    console.log(`📤 Sending email from: ${sender}`);
 
     const result = await transporter.sendMail({
       from: sender,
@@ -73,11 +76,11 @@ export const sendMail = async ({ to, subject, text, html, from }) => {
       html
     });
 
-    // Email sent successfully
+    console.log(`✅ Email sent successfully to ${to}, Message ID: ${result.messageId}`);
     return result;
 
   } catch (error) {
-    // Failed to send email
+    console.log(`❌ Failed to send email to ${to}:`, error.message);
     throw error;
   }
 };

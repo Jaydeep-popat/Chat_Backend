@@ -10,24 +10,33 @@ import { MESSAGE_TYPES, HTTP_STATUS, PAGINATION } from "../constants/index.js";
 const sendMessage = asyncHandler(async (req, res) => {
   const { receiver, room, content, messageType } = req.body;
   const sender = req.user._id;
+  
+  console.log(`📨 Message send attempt from user: ${sender}`);
+  console.log(`📝 Message details: Type=${messageType}, Receiver=${receiver}, Room=${room}`);
 
   const allowedMessageTypes = Object.values(MESSAGE_TYPES);
 
   if (!messageType || !allowedMessageTypes.includes(messageType)) {
+    console.log(`❌ Invalid message type: ${messageType}`);
     throw new apiError(HTTP_STATUS.BAD_REQUEST, "Invalid or missing message type.");
   }
 
   if (!receiver && !room) {
+    console.log("❌ Message send failed: No receiver or room provided");
     throw new apiError(400, "Either receiver or room ID must be provided.");
   }
 
   if (receiver && room) {
+    console.log("❌ Message send failed: Both receiver and room provided");
     throw new apiError(400, "Provide either receiver or room, not both.");
   }
 
   if (messageType === MESSAGE_TYPES.TEXT && (!content || content.trim().length === 0)) {
+    console.log("❌ Text message send failed: Empty content");
     throw new apiError(HTTP_STATUS.BAD_REQUEST, "Text message must have content.");
   }
+  
+  console.log(`✅ Message validation passed for ${receiver ? 'DM' : 'Group'} message`);
 
   let fileUrl = null;
   if ([MESSAGE_TYPES.IMAGE, MESSAGE_TYPES.VIDEO, MESSAGE_TYPES.FILE].includes(messageType)) {

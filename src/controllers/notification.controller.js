@@ -8,7 +8,11 @@ import { HTTP_STATUS, PAGINATION } from "../constants/index.js";
 const createNotification = asyncHandler(async (req, res) => {
   const { user, message, chatRoom, type, content } = req.body;
 
+  console.log(`🔔 Notification creation attempt for user: ${user}`);
+  console.log(`📢 Notification details: Type="${type}", Content="${content}"`);
+
   if (!user || !type || !content) {
+    console.log("❌ Notification creation failed: Missing required fields");
     throw new apiError(HTTP_STATUS.BAD_REQUEST, "User, type, and content are required.");
   }
 
@@ -25,15 +29,22 @@ const createNotification = asyncHandler(async (req, res) => {
     .populate("message")
     .populate("chatRoom", "name");
 
+  console.log(`✅ Notification created successfully: ${notification._id}`);
+
   // Emit socket event to user
   const io = req.app.get("io");
   if (io && io.userSocketMap) {
     const userSockets = io.userSocketMap.get(user.toString());
     if (userSockets) {
+      console.log(`📡 Emitting notification to ${userSockets.length} socket(s) for user: ${user}`);
       userSockets.forEach(socketId => {
         io.to(socketId).emit("new-notification", populatedNotification);
       });
+    } else {
+      console.log(`📴 User not connected - notification saved but not emitted: ${user}`);
     }
+  } else {
+    console.log("❌ Socket.io not available for notification emission");
   }
 
   return res.status(HTTP_STATUS.CREATED).json(
@@ -50,6 +61,9 @@ const getUserNotifications = asyncHandler(async (req, res) => {
     read = null,
     type = null
   } = req.query;
+
+  console.log(`🔔 Fetching notifications for user: ${userId}`);
+  console.log(`📄 Query params: Page=${page}, Limit=${limit}, Read=${read}, Type=${type}`);
 
   const pageNumber = parseInt(page, 10);
   const limitNumber = Math.min(parseInt(limit, 10), PAGINATION.MAX_LIMIT);

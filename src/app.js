@@ -30,8 +30,15 @@ app.use(generalLimiter);
 app.use(cors({
     origin: [
         'http://localhost:3000',
-        'http://localhost:3001', 
-        process.env.CORS_ORIGIN
+        'http://localhost:3001',
+        process.env.CORS_ORIGIN,
+        process.env.FRONTEND_URL,
+        /\.vercel\.app$/,
+        /\.railway\.app$/,
+        /\.onrender\.com$/,
+        /\.fly\.dev$/,
+        /\.cyclic\.app$/,
+        /\.koyeb\.app$/
     ].filter(Boolean), // Remove any undefined values
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -51,14 +58,44 @@ app.use(cors({
 }))
 console.log("CORS enabled for origins:", [
     'http://localhost:3000',
-    'http://localhost:3001', 
-    process.env.CORS_ORIGIN
+    'http://localhost:3001',
+    process.env.CORS_ORIGIN,
+    process.env.FRONTEND_URL,
+    'Vercel domains (*.vercel.app)',
+    'Railway domains (*.railway.app)',
+    'Render domains (*.onrender.com)',
+    'Fly.io domains (*.fly.dev)',
+    'Cyclic domains (*.cyclic.app)',
+    'Koyeb domains (*.koyeb.app)'
 ].filter(Boolean));
 app.use(express.json({ limit: "20kb" }));
 app.use(express.urlencoded({ extended: true, limit: "20kb" }));
 app.use(express.static("public"));
 app.use(cookieParser());
 
+// Health check endpoint for Railway/Docker
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'OK',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV || 'development'
+  });
+});
+
+// API info endpoint
+app.get('/api', (req, res) => {
+  res.status(200).json({
+    name: 'MeanMessenger Backend API',
+    version: '1.0.0',
+    status: 'Running',
+    endpoints: {
+      users: '/api/users',
+      messages: '/api/messages',
+      chatRooms: '/api/chat-rooms'
+    }
+  });
+});
 
 import userRouter from './router/user.routes.js';
 app.use("/api/users", userRouter);

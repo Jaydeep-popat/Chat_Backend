@@ -80,41 +80,52 @@ export const initSocket = (io) => {
       // Only accept tokens from cookies (more secure than query params)
       const token = cookies.accessToken;
       if (!token) {
+        console.log("❌ Socket auth failed: No access token in cookies");
         throw new apiError(401, "Unauthorized", "No access token provided in cookies.");
       }
 
       const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
       socket.userId = decoded._id;
+      console.log(`🔍 Socket auth: Verifying user ${decoded._id}`);
 
       const user = await User.findById(socket.userId).select("_id");
       if (!user) {
+        console.log(`❌ Socket auth failed: User ${socket.userId} not found in database`);
         throw new apiError(401, "User not found");
       }
       
+      console.log(`✅ Socket authenticated for user: ${socket.userId}`);
       next();
     } catch (err) {
+      console.log(`❌ Socket authentication error: ${err.message}`);
       next({ status: err.status || 401, message: err.message || "Auth error" });
     }
   });
 
   io.on("connection", (socket) => {
     const userId = socket.userId;
+    console.log(`🔗 New socket connection: ${socket.id} for user: ${userId}`);
 
     // Track multiple sockets per user
     if (!userSocketMap.has(userId)) {
       userSocketMap.set(userId, new Set());
+      console.log(`🆕 First connection for user: ${userId}`);
     }
     userSocketMap.get(userId).add(socket.id);
-    
-    // User socket mapping updated
+    console.log(`📊 User ${userId} now has ${userSocketMap.get(userId).size} active connections`);
 
     // Update user's online status when they connect
+    console.log(`🟺 Setting user ${userId} as online`);
     User.findByIdAndUpdate(userId, { isOnline: true }, { new: true })
       .then(async (updatedUser) => {
+        console.log(`✅ User ${userId} marked as online in database`);
+        
         // Auto-join user to existing conversations where they're a participant
+        console.log(`🏠 Auto-joining user ${userId} to existing conversations`);
         await autoJoinExistingConversations(userId, socket, io);
         
         // Broadcast to all connected users that this user is online
+        console.log(`📡 Broadcasting online status for user: ${userId}`);
         io.emit("user-online", { userId: userId.toString() });
         
         // Send current user their own status
@@ -123,9 +134,10 @@ export const initSocket = (io) => {
           status: "online",
           message: "Connected successfully" 
         });
+        console.log(`✅ Socket connection setup complete for user: ${userId}`);
       })
       .catch((err) => {
-        // Error updating online status
+        console.error(`❌ Error updating online status for user ${userId}:`, err.message);
       });
 
     // Socket connected for user
@@ -138,21 +150,27 @@ export const initSocket = (io) => {
      */
     socket.on("join-chat", ({ targetUserId }) => {
       try {
+        console.log(`👥 User ${userId} attempting to join chat with ${targetUserId}`);
+        
         if (!targetUserId) {
+          console.log(`❌ Join chat failed: No target user ID provided`);
           throw new apiError(400, "Target user ID required.");
         }
 
         const roomId = [userId, targetUserId].sort().join("-");
+        console.log(`🏠 Generated room ID: ${roomId}`);
 
         if (!socket.joinedRooms.has(roomId)) {
           socket.join(roomId);
           socket.joinedRooms.add(roomId);
-          // User joined room
+          console.log(`✅ User ${userId} joined room: ${roomId}`);
+        } else {
+          console.log(`📄 User ${userId} already in room: ${roomId}`);
         }
 
         socket.emit("chat-joined", { roomId });
       } catch (err) {
-        // Join room error
+        console.error(`❌ Join chat error for user ${userId}:`, err.message);
         socket.emit("error", { status: err.status || 400, message: err.message });
       }
     });
@@ -210,9 +228,10 @@ export const initSocket = (io) => {
      */
     socket.on("join-group", ({ roomId }) => {
       try {
-        // User joining group room
+        console.log(`👥 User ${userId} attempting to join group: ${roomId}`);
         
         if (!roomId) {
+          console.log(`❌ Join group failed: No room ID provided`);
           throw new apiError(400, "Room ID required.");
         }
 
@@ -222,10 +241,10 @@ export const initSocket = (io) => {
         if (!socket.joinedRooms) socket.joinedRooms = new Set();
         socket.joinedRooms.add(roomId);
         
+        console.log(`✅ User ${userId} joined group room: ${roomId}`);
         socket.emit("group-joined", { roomId });
-        // User joined group room
       } catch (err) {
-        // Join group error
+        console.error(`❌ Join group error for user ${userId}:`, err.message);
         socket.emit("error", { status: err.status || 400, message: err.message });
       }
     });
@@ -300,6 +319,7 @@ export const initSocket = (io) => {
     socket.on("typing-start", ({ targetUserId, roomId }) => {
       try {
         if (targetUserId) {
+          console.log(`⌨️ User ${userId} started typing to ${targetUserId}`);
           // Direct message typing
           const roomIdGenerated = [userId.toString(), targetUserId.toString()].sort().join("-");
           
@@ -330,6 +350,7 @@ export const initSocket = (io) => {
             isTyping: true 
           });
         } else if (roomId) {
+          console.log(`⌨️ User ${userId} started typing in group ${roomId}`);
           // Group chat typing - ensure user is in the room
           if (!socket.joinedRooms) socket.joinedRooms = new Set();
           if (!socket.joinedRooms.has(roomId)) {
@@ -344,6 +365,7 @@ export const initSocket = (io) => {
           });
         }
       } catch (err) {
+        console.error(`❌ Typing start error for user ${userId}:`, err.message);
         socket.emit("error", { status: err.status || 400, message: err.message });
       }
     });

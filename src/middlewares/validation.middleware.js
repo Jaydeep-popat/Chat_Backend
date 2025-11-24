@@ -5,11 +5,15 @@ import { apiError } from "../utils/apiError.js";
 export const handleValidationErrors = (req, res, next) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
+    console.log(`❌ Validation failed for ${req.method} ${req.path}`);
+    
     const formattedErrors = errors.array().map(error => ({
       field: error.path,
       message: error.msg,
       value: error.value
     }));
+    
+    console.log(`🔍 Validation errors:`, formattedErrors);
     
     // Create a more detailed error message
     const errorMessages = formattedErrors.map(err => `${err.field}: ${err.message}`).join(', ');
@@ -17,6 +21,8 @@ export const handleValidationErrors = (req, res, next) => {
     
     throw new apiError(400, detailedMessage, formattedErrors);
   }
+  
+  console.log(`✅ Validation passed for ${req.method} ${req.path}`);
   next();
 };
 

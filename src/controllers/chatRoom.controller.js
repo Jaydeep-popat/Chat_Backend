@@ -13,7 +13,11 @@ const createGroupChat = asyncHandler(async (req, res) => {
   let { participants } = req.body;
   const createdBy = req.user._id;
 
+  console.log(`👥 Group chat creation attempt by user: ${createdBy}`);
+  console.log(`📝 Group details: Name="${name}", Description="${description}"`);
+
   if (!name || !name.trim()) {
+    console.log("❌ Group creation failed: No name provided");
     throw new apiError(HTTP_STATUS.BAD_REQUEST, "Group chat name is required.");
   }
 
@@ -21,14 +25,19 @@ const createGroupChat = asyncHandler(async (req, res) => {
   if (typeof participants === 'string') {
     try {
       participants = JSON.parse(participants);
+      console.log(`🔄 Parsed participants from string: ${participants.length} users`);
     } catch (error) {
+      console.log("❌ Group creation failed: Invalid participants JSON format");
       throw new apiError(HTTP_STATUS.BAD_REQUEST, "Invalid participants format.");
     }
   }
 
   if (!participants || !Array.isArray(participants) || participants.length < 1) {
+    console.log("❌ Group creation failed: No participants provided");
     throw new apiError(HTTP_STATUS.BAD_REQUEST, "At least one other participant is required.");
   }
+
+  console.log(`✅ Group validation passed: ${participants.length} participants`);
 
   // Handle group image upload if provided
   let groupImageUrl = null;

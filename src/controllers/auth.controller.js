@@ -31,18 +31,23 @@ const buildResetPasswordEmail = (name, otp) => {
 };
 
 const registerUser = asyncHandler(async (req, res) => {
+  console.log("👤 User registration attempt started");
+  console.log(`📧 Registration request for email: ${req.body.email}`);
 
   const { username, displayName, email, password, role } = req.body;
 
   if ([username, displayName, email, password, role].some(field => !field)) {
+    console.log("❌ Registration failed: Missing required fields");
     throw new apiError(400, "All fields are required");
   }
 
+  console.log(`🔍 Checking for existing user with username: ${username} or email: ${email}`);
   const existedUser = await User.findOne({
     $or: [{ username }, { email }],
-  })
+  });
 
   if (existedUser) {
+    console.log(`❌ Registration failed: User already exists (${existedUser.email})`);
     throw new apiError(409, "User with email or username already exists");
   }
 
@@ -106,28 +111,40 @@ const registerUser = asyncHandler(async (req, res) => {
 });
 
 const loginUser = asyncHandler(async (req, res) => {
-
+  console.log("🔑 User login attempt started");
+  
   const { email, username, password } = req.body;
 
   if (!username && !email) {
+    console.log("❌ Login failed: No username or email provided");
     throw new apiError(400, "username or email is required.");
   }
   if (!password) {
+    console.log("❌ Login failed: No password provided");
     throw new apiError(400, "please provide the password.");
   }
+
+  const loginIdentifier = username || email;
+  console.log(`🔍 Login attempt for: ${loginIdentifier}`);
 
   const user = username
     ? await User.findOne({ username }).select("+password") 
     : await User.findOne({ email }).select("+password");
 
   if (!user) {
+    console.log(`❌ Login failed: User not found for identifier: ${loginIdentifier}`);
     throw new apiError(404, "User not found with the provided email or username.")
   }
+
+  console.log(`🔐 Validating password for user: ${user.username} (${user.email})`);
   const isPasswordValid = await user.comparePassword(password); 
 
   if (!isPasswordValid) {
+    console.log(`❌ Login failed: Invalid password for user: ${user.username}`);
     throw new apiError(401, "Invalid user credentials");
   }
+
+  console.log(`✅ Password validation successful for user: ${user.username}`);
 
   const accessToken = generateAccessToken(user);
   const refreshToken = generateRefreshToken(user);

@@ -1,0 +1,18 @@
+# Render Blueprint for MeanMessenger Backend
+# This file helps Render automatically detect your Node.js app
+
+services:
+  - type: web
+    name: meanmessenger-backend
+    env: node
+    region: oregon # or your preferred region
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        generateValue: true
+    autoDeploy: true
+    healthCheckPath: /health
