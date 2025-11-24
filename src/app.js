@@ -73,6 +73,22 @@ app.use(express.urlencoded({ extended: true, limit: "20kb" }));
 app.use(express.static("public"));
 app.use(cookieParser());
 
+// Root endpoint - Welcome message
+app.get('/', (req, res) => {
+  res.status(200).json({
+    message: 'Welcome to MeanMessenger Backend API! 🚀',
+    status: 'Running',
+    endpoints: {
+      health: '/health',
+      api: '/api',
+      users: '/api/users',
+      messages: '/api/messages',
+      chatRooms: '/api/chat-rooms'
+    },
+    documentation: 'Check /api for more details'
+  });
+});
+
 // Health check endpoint for Railway/Docker
 app.get('/health', (req, res) => {
   res.status(200).json({
