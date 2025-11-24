@@ -157,21 +157,45 @@ const loginUser = asyncHandler(async (req, res) => {
     { new: true }
   ).select("-password");
 
+  // Determine environment and origin
+  const isProduction = process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION;
+  const origin = req.get('Origin') || req.get('Referer') || '';
+  const isLocalhostOrigin = origin.includes('localhost');
+  const isVercelOrigin = origin.includes('.vercel.app') || origin === process.env.FRONTEND_URL;
+  
+  console.log('🍪 Production cookie configuration:', {
+    nodeEnv: process.env.NODE_ENV,
+    isProduction,
+    origin,
+    isLocalhostOrigin,
+    isVercelOrigin,
+    frontendUrl: process.env.FRONTEND_URL
+  });
+
+  // Production configuration for HTTPS Vercel ↔ HTTPS Render
+  // Use secure cookies with SameSite=None for cross-origin HTTPS
+  const cookieConfig = {
+    secure: isProduction && !isLocalhostOrigin, // Secure for production HTTPS, not for localhost dev
+    sameSite: isProduction && !isLocalhostOrigin ? "none" : "lax" // None for production cross-origin, lax for dev
+  };
+
   // Access token options - allow JavaScript access for socket authentication
   const accessTokenOptions = {
     httpOnly: false, // Allow JavaScript access for socket.io
-    secure: process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION,
-    sameSite: process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION ? COOKIE_SETTINGS.SAME_SITE_PRODUCTION : COOKIE_SETTINGS.SAME_SITE_DEVELOPMENT,
+    secure: cookieConfig.secure,
+    sameSite: cookieConfig.sameSite,
     maxAge: TOKEN_EXPIRY.ACCESS_TOKEN,
   };
 
   // Refresh token options - keep httpOnly for security
   const refreshTokenOptions = {
     httpOnly: COOKIE_SETTINGS.HTTP_ONLY, // Keep httpOnly for security
-    secure: process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION,
-    sameSite: process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION ? COOKIE_SETTINGS.SAME_SITE_PRODUCTION : COOKIE_SETTINGS.SAME_SITE_DEVELOPMENT,
+    secure: cookieConfig.secure,
+    sameSite: cookieConfig.sameSite,
     maxAge: TOKEN_EXPIRY.REFRESH_TOKEN,
   };
+
+  console.log('🍪 Final cookie options:', { accessTokenOptions, refreshTokenOptions });
 
   const refreshTokenExpiry = new Date();
   refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + 7); // or from env
@@ -249,16 +273,28 @@ const logoutUser = asyncHandler(async (req, res) => {
   // Set user as offline when they log out
   await User.findByIdAndUpdate(decoded._id, { isOnline: false });
 
+  // Use the same cookie configuration logic as login
+  const isProductionBackend = process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION;
+  const isCrossOriginDev = isProductionBackend && req.get('Origin')?.includes('localhost');
+  
+  const cookieConfig = isCrossOriginDev ? {
+    secure: false,
+    sameSite: "lax"
+  } : {
+    secure: isProductionBackend,
+    sameSite: isProductionBackend ? "none" : "lax"
+  };
+
   res
     .clearCookie("accessToken", {
       httpOnly: false, // Match the login cookie settings
-      secure: process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION,
-      sameSite: process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION ? COOKIE_SETTINGS.SAME_SITE_PRODUCTION : COOKIE_SETTINGS.SAME_SITE_DEVELOPMENT
+      secure: cookieConfig.secure,
+      sameSite: cookieConfig.sameSite
     })
     .clearCookie("refreshToken", {
       httpOnly: COOKIE_SETTINGS.HTTP_ONLY,
-      secure: process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION,
-      sameSite: process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION ? COOKIE_SETTINGS.SAME_SITE_PRODUCTION : COOKIE_SETTINGS.SAME_SITE_DEVELOPMENT
+      secure: cookieConfig.secure,
+      sameSite: cookieConfig.sameSite
     });
 
   return res
@@ -605,18 +641,30 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
     const newAccessToken = generateAccessToken(user);
 
+    // Use the same cookie configuration logic as login
+    const isProductionBackend = process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION;
+    const isCrossOriginDev = isProductionBackend && req.get('Origin')?.includes('localhost');
+    
+    const cookieConfig = isCrossOriginDev ? {
+      secure: false,
+      sameSite: "lax"
+    } : {
+      secure: isProductionBackend,
+      sameSite: isProductionBackend ? "none" : "lax"
+    };
+
     res
       .cookie("accessToken", newAccessToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-        maxAge: 30 * 60 * 1000,
+        httpOnly: false, // Allow JavaScript access for socket.io
+        secure: cookieConfig.secure,
+        sameSite: cookieConfig.sameSite,
+        maxAge: TOKEN_EXPIRY.ACCESS_TOKEN,
       })
       .cookie("refreshToken", newRefreshToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-        maxAge: 7 * 24 * 60 * 60 * 1000
+        httpOnly: COOKIE_SETTINGS.HTTP_ONLY,
+        secure: cookieConfig.secure,
+        sameSite: cookieConfig.sameSite,
+        maxAge: TOKEN_EXPIRY.REFRESH_TOKEN
       });
 
     return res.status(200).json(
