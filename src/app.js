@@ -59,7 +59,7 @@ app.use(cors({
         'Cookie',
         'Set-Cookie'
     ],
-    exposedHeaders: ['Set-Cookie']
+    exposedHeaders: ['Set-Cookie'],
     optionsSuccessStatus: 200,
     preflightContinue: false
 }))
