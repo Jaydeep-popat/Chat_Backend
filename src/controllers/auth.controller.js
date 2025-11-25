@@ -225,6 +225,15 @@ const loginUser = asyncHandler(async (req, res) => {
     expiresAt: refreshTokenExpiry,
   });
 
+  console.log('🍪 Cookie setting debug:', {
+    origin: req.get('Origin'),
+    userAgent: req.get('User-Agent') ? 'Present' : 'Missing',
+    cookiesWillBeSet: {
+      accessToken: accessToken ? 'Present' : 'Missing',
+      refreshToken: refreshToken ? 'Present' : 'Missing'
+    }
+  });
+
   return res
     .status(200)
     .cookie("accessToken", accessToken, accessTokenOptions)
