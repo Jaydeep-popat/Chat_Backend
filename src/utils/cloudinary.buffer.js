@@ -11,6 +11,7 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET 
 });
 
+// Upload from local file path (existing function)
 const uploadOnCloudinary = async (localFilePath) => {
 
   try {
@@ -47,4 +48,32 @@ const uploadOnCloudinary = async (localFilePath) => {
   }
 };
 
-export {uploadOnCloudinary}
+// Upload from buffer (better for cloud platforms like Render)
+const uploadBufferToCloudinary = async (buffer, filename) => {
+  try {
+    if (!buffer) {
+      console.log("❌ Cloudinary upload failed: No buffer provided");
+      return null;
+    }
+
+    console.log(`☁️ Uploading buffer to Cloudinary: ${filename}`);
+
+    const response = await cloudinary.uploader.upload(
+      `data:image/upload;base64,${buffer.toString('base64')}`,
+      {
+        resource_type: "auto",
+        public_id: filename ? filename.split('.')[0] : undefined,
+      }
+    );
+
+    console.log(`✅ Cloudinary upload successful: ${response.public_id}`);
+    console.log(`🔗 File URL: ${response.secure_url}`);
+    
+    return response;
+  } catch (error) {
+    console.log(`❌ Cloudinary upload error: ${error.message}`);
+    return null;
+  }
+};
+
+export {uploadOnCloudinary, uploadBufferToCloudinary}

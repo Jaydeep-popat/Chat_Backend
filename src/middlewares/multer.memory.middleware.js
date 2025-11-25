@@ -1,31 +1,9 @@
 import multer from "multer";
 import path from "path";
-import fs from "fs";
 import { apiError } from "../utils/apiError.js";
 
-// Ensure temp directory exists
-const tempDir = "./public/temp";
-if (!fs.existsSync("./public")) {
-  fs.mkdirSync("./public", { recursive: true });
-}
-if (!fs.existsSync(tempDir)) {
-  fs.mkdirSync(tempDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-    destination: function (req, file, cb) {
-      // Ensure directory exists before saving
-      if (!fs.existsSync(tempDir)) {
-        fs.mkdirSync(tempDir, { recursive: true });
-      }
-      cb(null, tempDir);
-    },
-    filename: function (req, file, cb) {
-      // Add timestamp to prevent filename conflicts
-      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-      cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
-    }
-});
+// Use memory storage instead of disk storage for cloud platforms
+const storage = multer.memoryStorage();
 
 // File filter for security
 const fileFilter = (req, file, cb) => {
@@ -52,7 +30,7 @@ const fileFilter = (req, file, cb) => {
   }
 };
 
-export const upload = multer({ 
+export const uploadMemory = multer({ 
     storage,
     fileFilter,
     limits: {

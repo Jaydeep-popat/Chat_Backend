@@ -3,10 +3,26 @@ import dotenv from 'dotenv';
 import cors from 'cors';
 import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
+import fs from 'fs';
 import { globalErrorHandler, notFoundHandler } from './middlewares/error.middleware.js';
 import { generalLimiter } from './middlewares/rateLimiter.middleware.js';
 
 dotenv.config();
+
+// Ensure required directories exist (important for cloud deployment)
+const ensureDirectories = () => {
+  const directories = ['./public', './public/temp'];
+  directories.forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      console.log(`📁 Created directory: ${dir}`);
+    }
+  });
+};
+
+// Initialize directories
+ensureDirectories();
+
 const app = express();
 //  "start": "node ./src/index.js"
 
