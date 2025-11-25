@@ -160,25 +160,24 @@ const loginUser = asyncHandler(async (req, res) => {
   // Determine environment and origin
   const isProduction = process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION;
   const origin = req.get('Origin') || req.get('Referer') || '';
-  const isLocalhostOrigin = origin.includes('localhost');
-  const isVercelOrigin = origin.includes('.vercel.app') || origin === process.env.FRONTEND_URL;
+  const frontendDomain = process.env.FRONTEND_DOMAIN; // chatflow-flax.vercel.app
   
   console.log('🍪 Production cookie configuration:', {
     nodeEnv: process.env.NODE_ENV,
     isProduction,
     origin,
-    isLocalhostOrigin,
-    isVercelOrigin,
+    frontendDomain,
     frontendUrl: process.env.FRONTEND_URL
   });
 
   // Production configuration for HTTPS Vercel ↔ HTTPS Render
-  // Use secure cookies with SameSite=None for cross-origin HTTPS
+  // Set domain to frontend domain for Next.js middleware compatibility
   const cookieConfig = {
     secure: isProduction,
     sameSite: isProduction ? "none" : "lax",
     path: "/",
-    domain: isProduction && isVercelOrigin ? undefined : undefined // Let browser handle domain
+    // CRITICAL: Set domain to frontend domain for cross-site cookies to work with Next.js middleware
+    domain: isProduction && frontendDomain ? frontendDomain : undefined
   };
 
   // Access token options - httpOnly for security
@@ -290,14 +289,14 @@ const logoutUser = asyncHandler(async (req, res) => {
 
   // Use the same cookie configuration logic as login
   const isProductionBackend = process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION;
-  const origin = req.get('Origin') || '';
-  const isVercelOrigin = origin.includes('.vercel.app');
+  const frontendDomain = process.env.FRONTEND_DOMAIN;
   
   const cookieConfig = {
     secure: isProductionBackend,
     sameSite: isProductionBackend ? "none" : "lax",
     path: "/",
-    domain: isProductionBackend && isVercelOrigin ? undefined : undefined
+    // CRITICAL: Use same domain as login for consistent cookie clearing
+    domain: isProductionBackend && frontendDomain ? frontendDomain : undefined
   };
 
   res

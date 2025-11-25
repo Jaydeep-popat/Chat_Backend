@@ -28,20 +28,27 @@ app.use(helmet({
 app.use(generalLimiter);
 
 app.use(cors({
-    origin: [
-        'http://localhost:3000',
-        'http://localhost:3001',
-        'https://chatflow-flax.vercel.app', // Explicit Vercel domain
-        process.env.CORS_ORIGIN,
-        process.env.FRONTEND_URL,
-        /\.vercel\.app$/,
-        /\.railway\.app$/,
-        /\.onrender\.com$/,
-        /\.fly\.dev$/,
-        /\.cyclic\.app$/,
-        /\.koyeb\.app$/
-    ].filter(Boolean), // Remove any undefined values
+    origin: function (origin, callback) {
+        // Allow requests with no origin (mobile apps, Postman, etc.)
+        if (!origin) return callback(null, true);
+        
+        const allowedOrigins = [
+            'http://localhost:3000',
+            'http://localhost:3001', 
+            'https://chatflow-flax.vercel.app',
+            process.env.FRONTEND_URL,
+            process.env.CORS_ORIGIN
+        ].filter(Boolean);
+
+        if (allowedOrigins.includes(origin)) {
+            callback(null, true);
+        } else {
+            console.log('🚫 CORS blocked origin:', origin);
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true, // Essential for cross-domain cookies
+    optionsSuccessStatus: 200, // For legacy browser support
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: [
         'Content-Type', 
@@ -49,10 +56,10 @@ app.use(cors({
         'X-Requested-With', 
         'Accept', 
         'Origin',
-        'Cookie', // Allow Cookie header
-        'Set-Cookie' // Allow Set-Cookie header
+        'Cookie',
+        'Set-Cookie'
     ],
-    exposedHeaders: ['Set-Cookie'], // Expose Set-Cookie to frontend
+    exposedHeaders: ['Set-Cookie']
     optionsSuccessStatus: 200,
     preflightContinue: false
 }))
