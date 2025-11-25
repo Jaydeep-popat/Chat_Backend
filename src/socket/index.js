@@ -73,15 +73,29 @@ export const initSocket = (io) => {
   io.use(async (socket, next) => {
     try {
       
-      const cookies = socket.handshake.headers.cookie
-        ? cookie.parse(socket.handshake.headers.cookie)
-        : {};
+      // Try multiple sources for token: Authorization header -> query params -> cookies
+      const authHeader = socket.handshake.headers.authorization;
+      const queryToken = socket.handshake.query?.token;
+      let token = null;
       
-      // Only accept tokens from cookies (more secure than query params)
-      const token = cookies.accessToken;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        token = authHeader.substring(7); // Remove 'Bearer ' prefix
+        console.log("🔑 Socket auth: Using Authorization header token");
+      } else if (queryToken && typeof queryToken === 'string') {
+        token = queryToken;
+        console.log("🔗 Socket auth: Using query parameter token");
+      } else {
+        // Fallback to cookies for backward compatibility
+        const cookies = socket.handshake.headers.cookie
+          ? cookie.parse(socket.handshake.headers.cookie)
+          : {};
+        token = cookies.accessToken;
+        console.log("🍪 Socket auth: Using cookie token fallback");
+      }
+      
       if (!token) {
-        console.log("❌ Socket auth failed: No access token in cookies");
-        throw new apiError(401, "Unauthorized", "No access token provided in cookies.");
+        console.log("❌ Socket auth failed: No access token in Authorization header or cookies");
+        throw new apiError(401, "Unauthorized", "No access token provided in Authorization header or cookies.");
       }
 
       const decoded = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
