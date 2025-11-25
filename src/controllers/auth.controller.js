@@ -236,19 +236,33 @@ const loginUser = asyncHandler(async (req, res) => {
     }
   });
 
-  return res
+  // EXPERIMENTAL: Try manual cookie setting that matches browser test
+  const manualAccessCookie = `accessToken=${accessToken}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=1800`;
+  const manualRefreshCookie = `refreshToken=${refreshToken}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=604800`;
+
+  // Set cookies and send response
+  const response = res
     .status(200)
     .header('Access-Control-Allow-Credentials', 'true')
     .header('Access-Control-Expose-Headers', 'Set-Cookie')
-    .cookie("accessToken", accessToken, accessTokenOptions)
-    .cookie("refreshToken", refreshToken, refreshTokenOptions)
-    .json(
-      new apiResponse(
-        200,
-        { user: loggedInUser, tokens: { accessToken, refreshToken, } },
-        "User logged In Successfully"
-      )
-    );
+    .header('Set-Cookie', [manualAccessCookie, manualRefreshCookie]);
+    // Also try the traditional way as fallback
+    // .cookie("accessToken", accessToken, accessTokenOptions)
+    // .cookie("refreshToken", refreshToken, refreshTokenOptions);
+
+  console.log('🔍 Manual cookies being set:', {
+    manualAccessCookie,
+    manualRefreshCookie,
+    headers: response.getHeaders()
+  });
+
+  return response.json(
+    new apiResponse(
+      200,
+      { user: loggedInUser, tokens: { accessToken, refreshToken, } },
+      "User logged In Successfully"
+    )
+  );
 });
 
 const logoutUser = asyncHandler(async (req, res) => {
