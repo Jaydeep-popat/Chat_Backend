@@ -236,33 +236,27 @@ const loginUser = asyncHandler(async (req, res) => {
     }
   });
 
-  // EXPERIMENTAL: Try manual cookie setting that matches browser test
-  const manualAccessCookie = `accessToken=${accessToken}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=1800`;
-  const manualRefreshCookie = `refreshToken=${refreshToken}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=604800`;
+  console.log('🔄 Switching to Authorization header approach - no cookies needed');
 
-  // Set cookies and send response
-  const response = res
+  // Return tokens in response body for frontend to handle
+  // Frontend will store in localStorage and send as Authorization header
+  return res
     .status(200)
     .header('Access-Control-Allow-Credentials', 'true')
-    .header('Access-Control-Expose-Headers', 'Set-Cookie')
-    .header('Set-Cookie', [manualAccessCookie, manualRefreshCookie]);
-    // Also try the traditional way as fallback
-    // .cookie("accessToken", accessToken, accessTokenOptions)
-    // .cookie("refreshToken", refreshToken, refreshTokenOptions);
-
-  console.log('🔍 Manual cookies being set:', {
-    manualAccessCookie,
-    manualRefreshCookie,
-    headers: response.getHeaders()
-  });
-
-  return response.json(
-    new apiResponse(
-      200,
-      { user: loggedInUser, tokens: { accessToken, refreshToken, } },
-      "User logged In Successfully"
-    )
-  );
+    .json(
+      new apiResponse(
+        200,
+        { 
+          user: loggedInUser, 
+          tokens: { 
+            accessToken, 
+            refreshToken,
+            expiresIn: TOKEN_EXPIRY.ACCESS_TOKEN // For frontend to know when to refresh
+          } 
+        },
+        "User logged In Successfully"
+      )
+    );
 });
 
 const logoutUser = asyncHandler(async (req, res) => {
@@ -622,7 +616,10 @@ const updateProfilePicture = asyncHandler(async (req, res) => {
 })
 
 const refreshAccessToken = asyncHandler(async (req, res) => {
-  const incomingRefreshToken = req.cookies?.refreshToken;
+  // Try to get refresh token from Authorization header or cookies
+  const incomingRefreshToken = req.header("Authorization")?.replace("Bearer ", "") || 
+                               req.body?.refreshToken || 
+                               req.cookies?.refreshToken;
 
   if (!incomingRefreshToken) {
     throw new apiError(401, "Refresh token not found");
@@ -692,28 +689,15 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
       domain: isProductionBackend && isVercelOrigin ? undefined : undefined
     };
 
-    res
-      .cookie("accessToken", newAccessToken, {
-        httpOnly: true, // Always httpOnly for security
-        secure: cookieConfig.secure,
-        sameSite: cookieConfig.sameSite,
-        path: cookieConfig.path,
-        domain: cookieConfig.domain,
-        maxAge: TOKEN_EXPIRY.ACCESS_TOKEN,
-      })
-      .cookie("refreshToken", newRefreshToken, {
-        httpOnly: true,
-        secure: cookieConfig.secure,
-        sameSite: cookieConfig.sameSite,
-        path: cookieConfig.path,
-        domain: cookieConfig.domain,
-        maxAge: TOKEN_EXPIRY.REFRESH_TOKEN
-      });
-
+    // Return tokens in response body instead of cookies
     return res.status(200).json(
       new apiResponse(
         200,
-        { accessToken: newAccessToken, refreshToken: newRefreshToken },
+        { 
+          accessToken: newAccessToken, 
+          refreshToken: newRefreshToken,
+          expiresIn: TOKEN_EXPIRY.ACCESS_TOKEN
+        },
         "New tokens generated successfully"
       )
     );
@@ -733,20 +717,14 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
       domain: isProductionBackend && isVercelOrigin ? undefined : undefined
     };
 
-    res
-      .cookie("accessToken", newAccessToken, {
-        httpOnly: true,
-        secure: cookieConfig.secure,
-        sameSite: cookieConfig.sameSite,
-        path: cookieConfig.path,
-        domain: cookieConfig.domain,
-        maxAge: TOKEN_EXPIRY.ACCESS_TOKEN,
-      });
-
+    // Return tokens in response body instead of cookies
     return res.status(200).json(
       new apiResponse(
         200,
-        { accessToken: newAccessToken },
+        { 
+          accessToken: newAccessToken,
+          expiresIn: TOKEN_EXPIRY.ACCESS_TOKEN
+        },
         "Access token refreshed successfully"
       )
     );
