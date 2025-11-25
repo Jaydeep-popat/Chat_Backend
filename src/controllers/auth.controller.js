@@ -160,14 +160,17 @@ const loginUser = asyncHandler(async (req, res) => {
   // Determine environment and origin
   const isProduction = process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION;
   const origin = req.get('Origin') || req.get('Referer') || '';
-  const frontendDomain = process.env.FRONTEND_DOMAIN; // chatflow-flax.vercel.app
+  
+  // CRITICAL FIX: Hardcode frontend domain as fallback if env var not set on Render
+  const frontendDomain = process.env.FRONTEND_DOMAIN || 'chatflow-flax.vercel.app';
   
   console.log('🍪 Production cookie configuration:', {
     nodeEnv: process.env.NODE_ENV,
     isProduction,
     origin,
     frontendDomain,
-    frontendUrl: process.env.FRONTEND_URL
+    frontendUrl: process.env.FRONTEND_URL,
+    envFrontendDomain: process.env.FRONTEND_DOMAIN
   });
 
   // Production configuration for HTTPS Vercel ↔ HTTPS Render
@@ -176,8 +179,8 @@ const loginUser = asyncHandler(async (req, res) => {
     secure: isProduction,
     sameSite: isProduction ? "none" : "lax",
     path: "/",
-    // CRITICAL: Set domain to frontend domain for cross-site cookies to work with Next.js middleware
-    domain: isProduction && frontendDomain ? frontendDomain : undefined
+    // CRITICAL: Always set domain to frontend domain in production for cross-site cookies
+    domain: isProduction ? frontendDomain : undefined
   };
 
   // Access token options - httpOnly for security
@@ -289,14 +292,16 @@ const logoutUser = asyncHandler(async (req, res) => {
 
   // Use the same cookie configuration logic as login
   const isProductionBackend = process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION;
-  const frontendDomain = process.env.FRONTEND_DOMAIN;
+  
+  // CRITICAL FIX: Hardcode frontend domain as fallback
+  const frontendDomain = process.env.FRONTEND_DOMAIN || 'chatflow-flax.vercel.app';
   
   const cookieConfig = {
     secure: isProductionBackend,
     sameSite: isProductionBackend ? "none" : "lax",
     path: "/",
-    // CRITICAL: Use same domain as login for consistent cookie clearing
-    domain: isProductionBackend && frontendDomain ? frontendDomain : undefined
+    // CRITICAL: Always use frontend domain in production for consistent cookie clearing
+    domain: isProductionBackend ? frontendDomain : undefined
   };
 
   res
