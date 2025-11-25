@@ -174,13 +174,13 @@ const loginUser = asyncHandler(async (req, res) => {
   });
 
   // Production configuration for HTTPS Vercel ↔ HTTPS Render
-  // Set domain to frontend domain for Next.js middleware compatibility
+  // CRITICAL: Do NOT set domain for cross-site cookies - let browser handle it
   const cookieConfig = {
     secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
+    sameSite: isProduction ? "none" : "lax", 
     path: "/",
-    // CRITICAL: Always set domain to frontend domain in production for cross-site cookies
-    domain: isProduction ? frontendDomain : undefined
+    // IMPORTANT: No domain for cross-site cookies (browser will handle correctly)
+    domain: undefined
   };
 
   // Access token options - httpOnly for security
@@ -300,8 +300,8 @@ const logoutUser = asyncHandler(async (req, res) => {
     secure: isProductionBackend,
     sameSite: isProductionBackend ? "none" : "lax",
     path: "/",
-    // CRITICAL: Always use frontend domain in production for consistent cookie clearing
-    domain: isProductionBackend ? frontendDomain : undefined
+    // IMPORTANT: No domain for cross-site cookie clearing (match login behavior)
+    domain: undefined
   };
 
   res
