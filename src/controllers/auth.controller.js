@@ -175,23 +175,29 @@ const loginUser = asyncHandler(async (req, res) => {
   // Production configuration for HTTPS Vercel ↔ HTTPS Render
   // Use secure cookies with SameSite=None for cross-origin HTTPS
   const cookieConfig = {
-    secure: isProduction && !isLocalhostOrigin, // Secure for production HTTPS, not for localhost dev
-    sameSite: isProduction && !isLocalhostOrigin ? "none" : "lax" // None for production cross-origin, lax for dev
+    secure: isProduction,
+    sameSite: isProduction ? "none" : "lax",
+    path: "/",
+    domain: isProduction && isVercelOrigin ? undefined : undefined // Let browser handle domain
   };
 
-  // Access token options - allow JavaScript access for socket authentication
+  // Access token options - httpOnly for security
   const accessTokenOptions = {
-    httpOnly: true, // Allow JavaScript access for socket.io
-    secure: true,
-    sameSite: none,
+    httpOnly: true, // Always httpOnly for security
+    secure: cookieConfig.secure,
+    sameSite: cookieConfig.sameSite,
+    path: cookieConfig.path,
+    domain: cookieConfig.domain,
     maxAge: TOKEN_EXPIRY.ACCESS_TOKEN,
   };
 
   // Refresh token options - keep httpOnly for security
   const refreshTokenOptions = {
-    httpOnly: COOKIE_SETTINGS.HTTP_ONLY, // Keep httpOnly for security
+    httpOnly: true, // Always httpOnly for security
     secure: cookieConfig.secure,
     sameSite: cookieConfig.sameSite,
+    path: cookieConfig.path,
+    domain: cookieConfig.domain,
     maxAge: TOKEN_EXPIRY.REFRESH_TOKEN,
   };
 
@@ -275,26 +281,30 @@ const logoutUser = asyncHandler(async (req, res) => {
 
   // Use the same cookie configuration logic as login
   const isProductionBackend = process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION;
-  const isCrossOriginDev = isProductionBackend && req.get('Origin')?.includes('localhost');
+  const origin = req.get('Origin') || '';
+  const isVercelOrigin = origin.includes('.vercel.app');
   
-  const cookieConfig = isCrossOriginDev ? {
-    secure: false,
-    sameSite: "lax"
-  } : {
+  const cookieConfig = {
     secure: isProductionBackend,
-    sameSite: isProductionBackend ? "none" : "lax"
+    sameSite: isProductionBackend ? "none" : "lax",
+    path: "/",
+    domain: isProductionBackend && isVercelOrigin ? undefined : undefined
   };
 
   res
     .clearCookie("accessToken", {
-      httpOnly: false, // Match the login cookie settings
+      httpOnly: true, // Match the login cookie settings
       secure: cookieConfig.secure,
-      sameSite: cookieConfig.sameSite
+      sameSite: cookieConfig.sameSite,
+      path: cookieConfig.path,
+      domain: cookieConfig.domain
     })
     .clearCookie("refreshToken", {
-      httpOnly: COOKIE_SETTINGS.HTTP_ONLY,
+      httpOnly: true,
       secure: cookieConfig.secure,
-      sameSite: cookieConfig.sameSite
+      sameSite: cookieConfig.sameSite,
+      path: cookieConfig.path,
+      domain: cookieConfig.domain
     });
 
   return res
@@ -643,27 +653,31 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
     // Use the same cookie configuration logic as login
     const isProductionBackend = process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION;
-    const isCrossOriginDev = isProductionBackend && req.get('Origin')?.includes('localhost');
+    const origin = req.get('Origin') || '';
+    const isVercelOrigin = origin.includes('.vercel.app');
     
-    const cookieConfig = isCrossOriginDev ? {
-      secure: false,
-      sameSite: "lax"
-    } : {
+    const cookieConfig = {
       secure: isProductionBackend,
-      sameSite: isProductionBackend ? "none" : "lax"
+      sameSite: isProductionBackend ? "none" : "lax",
+      path: "/",
+      domain: isProductionBackend && isVercelOrigin ? undefined : undefined
     };
 
     res
       .cookie("accessToken", newAccessToken, {
-        httpOnly: false, // Allow JavaScript access for socket.io
+        httpOnly: true, // Always httpOnly for security
         secure: cookieConfig.secure,
         sameSite: cookieConfig.sameSite,
+        path: cookieConfig.path,
+        domain: cookieConfig.domain,
         maxAge: TOKEN_EXPIRY.ACCESS_TOKEN,
       })
       .cookie("refreshToken", newRefreshToken, {
-        httpOnly: COOKIE_SETTINGS.HTTP_ONLY,
+        httpOnly: true,
         secure: cookieConfig.secure,
         sameSite: cookieConfig.sameSite,
+        path: cookieConfig.path,
+        domain: cookieConfig.domain,
         maxAge: TOKEN_EXPIRY.REFRESH_TOKEN
       });
 
@@ -678,12 +692,26 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
     // If token NOT expired, only generate new access token
     const newAccessToken = generateAccessToken(user);
 
+    // Use consistent cookie configuration
+    const isProductionBackend = process.env.NODE_ENV === ENVIRONMENTS.PRODUCTION;
+    const origin = req.get('Origin') || '';
+    const isVercelOrigin = origin.includes('.vercel.app');
+    
+    const cookieConfig = {
+      secure: isProductionBackend,
+      sameSite: isProductionBackend ? "none" : "lax",
+      path: "/",
+      domain: isProductionBackend && isVercelOrigin ? undefined : undefined
+    };
+
     res
       .cookie("accessToken", newAccessToken, {
         httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: process.env.NODE_ENV === "production" ? "strict" : "lax",
-        maxAge: 30 * 60 * 1000,
+        secure: cookieConfig.secure,
+        sameSite: cookieConfig.sameSite,
+        path: cookieConfig.path,
+        domain: cookieConfig.domain,
+        maxAge: TOKEN_EXPIRY.ACCESS_TOKEN,
       });
 
     return res.status(200).json(

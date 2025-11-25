@@ -98,12 +98,13 @@ export const COOKIE_SETTINGS = Object.freeze({
   ACCESS_TOKEN_NAME: "accessToken",
   REFRESH_TOKEN_NAME: "refreshToken",
   SECURE_PRODUCTION: true,
-  HTTP_ONLY: true,
-  // Use 'none' for cross-site cookies but handle mixed HTTP/HTTPS
+  HTTP_ONLY: true, // Always httpOnly for security
+  // Use 'none' for cross-site cookies in production
   SAME_SITE_PRODUCTION: "none",
-  SAME_SITE_DEVELOPMENT: "none", // Changed to 'none' for cross-origin dev
-  // Domain settings for Vercel
-  DOMAIN_PRODUCTION: process.env.NODE_ENV === 'production' ? undefined : undefined, // Let browser handle
+  SAME_SITE_DEVELOPMENT: "lax",
+  PATH: "/",
+  // Let browser handle domain for cross-origin requests
+  DOMAIN_PRODUCTION: undefined,
   DOMAIN_DEVELOPMENT: undefined
 });
 

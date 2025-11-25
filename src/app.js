@@ -31,6 +31,7 @@ app.use(cors({
     origin: [
         'http://localhost:3000',
         'http://localhost:3001',
+        'https://chatflow-flax.vercel.app', // Explicit Vercel domain
         process.env.CORS_ORIGIN,
         process.env.FRONTEND_URL,
         /\.vercel\.app$/,
@@ -40,7 +41,7 @@ app.use(cors({
         /\.cyclic\.app$/,
         /\.koyeb\.app$/
     ].filter(Boolean), // Remove any undefined values
-    credentials: true,
+    credentials: true, // Essential for cross-domain cookies
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: [
         'Content-Type', 
@@ -48,11 +49,10 @@ app.use(cors({
         'X-Requested-With', 
         'Accept', 
         'Origin',
-        'Access-Control-Allow-Origin',
-        'Access-Control-Allow-Headers',
-        'Access-Control-Allow-Methods'
+        'Cookie', // Allow Cookie header
+        'Set-Cookie' // Allow Set-Cookie header
     ],
-    exposedHeaders: ['Set-Cookie'],
+    exposedHeaders: ['Set-Cookie'], // Expose Set-Cookie to frontend
     optionsSuccessStatus: 200,
     preflightContinue: false
 }))
