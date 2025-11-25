@@ -238,6 +238,8 @@ const loginUser = asyncHandler(async (req, res) => {
 
   return res
     .status(200)
+    .header('Access-Control-Allow-Credentials', 'true')
+    .header('Access-Control-Expose-Headers', 'Set-Cookie')
     .cookie("accessToken", accessToken, accessTokenOptions)
     .cookie("refreshToken", refreshToken, refreshTokenOptions)
     .json(
