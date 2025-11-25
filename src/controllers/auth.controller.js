@@ -181,9 +181,9 @@ const loginUser = asyncHandler(async (req, res) => {
 
   // Access token options - allow JavaScript access for socket authentication
   const accessTokenOptions = {
-    httpOnly: false, // Allow JavaScript access for socket.io
-    secure: cookieConfig.secure,
-    sameSite: cookieConfig.sameSite,
+    httpOnly: true, // Allow JavaScript access for socket.io
+    secure: true,
+    sameSite: none,
     maxAge: TOKEN_EXPIRY.ACCESS_TOKEN,
   };
 
