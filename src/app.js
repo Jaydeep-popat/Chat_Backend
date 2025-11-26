@@ -7,7 +7,7 @@ import fs from 'fs';
 import { globalErrorHandler, notFoundHandler } from './middlewares/error.middleware.js';
 import { generalLimiter } from './middlewares/rateLimiter.middleware.js';
 
-dotenv.config();
+dotenv.config();  
 
 // Ensure required directories exist (important for cloud deployment)
 const ensureDirectories = () => {

@@ -1,8 +1,19 @@
 import jwt from "jsonwebtoken";
 
+// Validate environment variables
+const validateTokenSecrets = () => {
+  if (!process.env.ACCESS_TOKEN_SECRET) {
+    throw new Error("ACCESS_TOKEN_SECRET environment variable is required");
+  }
+  if (!process.env.REFRESH_TOKEN_SECRET) {
+    throw new Error("REFRESH_TOKEN_SECRET environment variable is required");
+  }
+};
+
 // Access token generation
 export const generateAccessToken = (user) => {
   try {
+    validateTokenSecrets();
     const token = jwt.sign(
       {
         _id: user._id,
@@ -10,7 +21,7 @@ export const generateAccessToken = (user) => {
         role: user.role,
       },
       process.env.ACCESS_TOKEN_SECRET,
-      { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "15m" } // Default to 15m
+      { expiresIn: process.env.ACCESS_TOKEN_EXPIRY || "30m" } // Increased to 30m to match constants
     );
 
     return token;
@@ -23,6 +34,7 @@ export const generateAccessToken = (user) => {
 // Refresh token generation
 export const generateRefreshToken = (user) => {
   try {
+    validateTokenSecrets();
     const token = jwt.sign(
       {
         _id: user._id,

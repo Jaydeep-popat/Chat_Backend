@@ -91,9 +91,12 @@ const registerUser = asyncHandler(async (req, res) => {
   const refreshTokenExpiry = new Date();
   refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + 7); // or use process.env.REFRESH_TOKEN_EXPIRY
 
+  // Hash the refresh token before storing
+  const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+  
   await RefreshToken.create({
     user: createdUser._id,
-    token: refreshToken,
+    token: hashedRefreshToken,
     expiresAt: refreshTokenExpiry,
   });
 
@@ -221,9 +224,12 @@ const loginUser = asyncHandler(async (req, res) => {
     // Failed to delete oldest token
   }
 
+  // Hash the refresh token before storing
+  const hashedRefreshToken = await bcrypt.hash(refreshToken, 10);
+  
   await RefreshToken.create({
     user: user._id,
-    token: refreshToken,
+    token: hashedRefreshToken,
     expiresAt: refreshTokenExpiry,
   });
 
@@ -669,10 +675,15 @@ const refreshAccessToken = asyncHandler(async (req, res) => {
 
     // Replace old token
     await RefreshToken.findByIdAndDelete(existingToken._id);
+    
+    // Calculate proper expiry (7 days from now)
+    const refreshTokenExpiry = new Date();
+    refreshTokenExpiry.setDate(refreshTokenExpiry.getDate() + 7);
+    
     await RefreshToken.create({
       user: user._id,
       token: hashedRefreshToken,
-      expiresAt: new Date(Date.now() + process.env.REFRESH_TOKEN_EXPIRY * 1000),
+      expiresAt: refreshTokenExpiry,
     });
 
     const newAccessToken = generateAccessToken(user);
